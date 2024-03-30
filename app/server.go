@@ -1,10 +1,15 @@
 package main
-
 import (
 	"fmt"
-	// Uncomment this block to pass the first stage
+	"log"
 	"net"
 	"os"
+	"strings"
+)
+const (
+	HOST = "localhost"
+	PORT = "4221"
+	TYPE = "tcp"
 )
 
 func main() {
@@ -13,37 +18,50 @@ func main() {
 
 	// Uncomment this block to pass the first stage
 	//
-	l, err := net.Listen("tcp", "0.0.0.0:4221")
+	listener, err := net.Listen(TYPE, HOST+":"+PORT)
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
-		os.Exit(1)
+		log.Fatal(err)
 	}
+	defer listener.Close()
 
-	conn, err := l.Accept()
+	for {
+		conn, err := listener.Accept()
 
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+		go handleConnection(conn)
+	}
+}
+
+func handleConnection(conn net.Conn) {
 	defer conn.Close()
-
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+	path := getPath(conn)
+	var response []byte
+	if path != "/" {
+		response = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
+	} else {
+		response = []byte("HTTP/1.1 200 OK\r\n\r\n")
+	}
+	_, errWrite := conn.Write(response)
+	if errWrite != nil {
+		log.Fatal(errWrite)
+	}
+}
+func getPath(conn net.Conn) string {
+	buffer := make([]byte, 1024)
+	buffN, errRd := conn.Read(buffer)
+	if errRd != nil {
+		log.Fatal(errRd)
 	}
 
-	fmt.Println("Client connected")
-	readBuffer := make([]byte, 2048)
-	bytesReceived, err := conn.Read(readBuffer)
-	if err != nil {
-		fmt.Printf("Error reading request: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Read %d bytes from client\n", bytesReceived)
-
-	httpResponse := "HTTP/1.1 200 OK\r\n\r\n"
-	bytesSent, err := conn.Write([]byte(httpResponse))
-	if err != nil {
-		fmt.Println("Error sending response: ", err.Error())
-		os.Exit(1)
-	}
-
-	fmt.Printf("Sent %d bytes to client (expected: %d)\n", bytesSent, len(httpResponse))
+	request := string(buffer[:buffN])
+	fmt.Println("REQUEST: ", request)
+	startLine := strings.Split(request, "\n")[0]
+	fmt.Println("START LINE: ", startLine)
+	path := strings.Split(startLine, " ")[1]
+	fmt.Println("PATH: ", path)
+	return path
 }
