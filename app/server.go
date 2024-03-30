@@ -12,7 +12,6 @@ func main() {
 	fmt.Println("Logs from your program will appear here!")
 
 	// Uncomment this block to pass the first stage
-	var response = "HTTP/1.1 200 OK\r\n\r\n"
 	
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
@@ -25,9 +24,9 @@ func main() {
 		fmt.Println("Error accepting connection: ", err.Error())
 		os.Exit(1)
 	}
-	
-	fmt.Println("debug1")
+
+	http200 := "HTTP/1.1 200 OK\r\n\r\n"
+	arrayBytes := []byte(http200)
 1
-	net.Conn.Write(conn, []byte(response))
-	fmt.Println("debug2")
+	conn.Write(arrayBytes)
 }
