@@ -1,67 +1,37 @@
 package main
 import (
+	"bytes"
 	"fmt"
-	"log"
 	"net"
 	"os"
-	"strings"
 )
-const (
-	HOST = "localhost"
-	PORT = "4221"
-	TYPE = "tcp"
-)
-
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
-
-	// Uncomment this block to pass the first stage
-	//
-	listener, err := net.Listen(TYPE, HOST+":"+PORT)
+	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
-		log.Fatal(err)
+		os.Exit(1)
 	}
-	defer listener.Close()
-
-	for {
-		conn, err := listener.Accept()
-
-		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
-			os.Exit(1)
-		}
-		go handleConnection(conn)
+	c, err := l.Accept()
+	if err != nil {
+		fmt.Println("Error accepting connection: ", err.Error())
+		os.Exit(1)
 	}
-}
-
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-	path := getPath(conn)
-	var response []byte
-	if path != "/" {
-		response = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
+	requestBuffer := make([]byte, 1024)
+	c.Read(requestBuffer)
+	contents := bytes.Split(requestBuffer, []byte("\r\n"))
+	path := bytes.SplitN(contents[0], []byte{' '}, 3)[1]
+	if bytes.Equal(path, []byte{'/'}) {
+		c.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+	} else if bytes.HasPrefix(path, []byte("/echo/")) {
+		c.Write([]byte("HTTP/1.1 200 OK\r\n"))
+		c.Write([]byte("Content-Type: text/plain\r\n"))
+		res := bytes.SplitN(path, []byte{'/'}, 3)[2]
+		a := "Content-Length: " + fmt.Sprint(len(res)) + "\r\n\r\n"
+		c.Write([]byte(a))
+		c.Write(bytes.SplitN(path, []byte{'/'}, 3)[2])
 	} else {
-		response = []byte("HTTP/1.1 200 OK\r\n\r\n")
+		c.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 	}
-	_, errWrite := conn.Write(response)
-	if errWrite != nil {
-		log.Fatal(errWrite)
-	}
-}
-func getPath(conn net.Conn) string {
-	buffer := make([]byte, 1024)
-	buffN, errRd := conn.Read(buffer)
-	if errRd != nil {
-		log.Fatal(errRd)
-	}
-
-	request := string(buffer[:buffN])
-	fmt.Println("REQUEST: ", request)
-	startLine := strings.Split(request, "\n")[0]
-	fmt.Println("START LINE: ", startLine)
-	path := strings.Split(startLine, " ")[1]
-	fmt.Println("PATH: ", path)
-	return path
+	c.Close()
 }
