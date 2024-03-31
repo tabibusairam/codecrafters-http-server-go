@@ -1,80 +1,86 @@
+
+
 package main
 import (
 	"fmt"
-	"strings"
 	// Uncomment this block to pass the first stage
 	"net"
 	"os"
+	"strings"
 )
-func getHeaders(req_parts []string) map[string]string {
-	headers := make(map[string]string)
-	for _, line := range req_parts {
-		parts := strings.Split(line, ": ")
-		if len(parts) == 2 {
-			headers[parts[0]] = parts[1]
-		}
+func main() {
+	// You can use print statements as follows for debugging, they'll be visible when running tests.
+	fmt.Println("Logs from your program will appear here!")
+	// Uncomment this block to pass the first stage
+	//
+	listener, err := net.Listen("tcp", "0.0.0.0:4221")
+	if err != nil {
+		fmt.Println("Failed to bind to port 4221")
+		os.Exit(1)
 	}
-	return headers
-}
-func handleConnection(conn net.Conn) {
-	var response []byte
-	buffer := make([]byte, 1024)
-	buffN, _ := conn.Read(buffer)
-	// fmt.Println(buffN)
-	request := string(buffer[:buffN])
-	// fmt.Println("REQUEST: ", request)
-
-	req_parts := strings.Split(request, "\r\n")
-	// fmt.Println(req_parts)
-	req_path_method := strings.Split(req_parts[0], " ")
-	headers := getHeaders(req_parts)
-	// fmt.Println(headers, req_path_method)
-	if req_path_method[1] == "/" {
-		response = []byte("HTTP/1.1 200 OK\r\nContent-Length: 13\r\nContent-Type: text/plain\r\n\r\nHello, world!")
-		} else if strings.HasPrefix(req_path_method[1], "/echo/") {
-			path := strings.Split(req_path_method[1], "/echo/")
-			resource := path[len(path)-1]
-			// fmt.Println(resource)
-			res_len := len(resource)
-			message := "HTTP/1.1 200 OK\r\nContent-Length:" + fmt.Sprint(res_len) + "\r\nContent-Type: text/plain\r\n\r\n" + resource
-			response = []byte(message)
-		} else if strings.HasPrefix(req_path_method[1], "/user-agent") {
-			user_agent, exists := headers["User-Agent"]
-			if !exists {
-				response = []byte("HTTP/1.1 200 OK\r\nContent-Length: 25\r\nContent-Type: text/plain\r\n\r\nNo user-agent in headers")
-			} else {
-				message := "HTTP/1.1 200 OK\r\nContent-Length:" + fmt.Sprint(len(user_agent)) + "\r\nContent-Type: text/plain\r\n\r\n" + user_agent
-				response = []byte(message)
-			}
-		} else {
-			response = []byte("HTTP/1.1 404 Not Found\r\nContent-Length: 11\r\nContent-Type: text/plain\r\n\r\nNot Found")
-		}
-		_, res_err := conn.Write(response)
-		if res_err != nil {
-			fmt.Println("Error sending data", res_err.Error())
-		}
-		// return response
-	}
-	func main() {
-		// You can use print statements as follows for debugging, they'll be visible when running tests.
-		fmt.Println("Logs from your program will appear here!")
-		// Uncomment this block to pass the first stage
-		//
-		listener, err := net.Listen("tcp", "0.0.0.0:4221")
+	for {
+		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println("Failed to bind to port 4221")
+			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
-		//
-		defer listener.Close()
-		for {
-			conn, con_err := listener.Accept()
-			if con_err != nil {
-				fmt.Println("Error accepting connection: ", err.Error())
-				os.Exit(1)
-			}
-			// response := []byte("HTTP/1.1 200 OK\r\n\r\n test output")
-			handleConnection(conn)
-			conn.Close()
-		}
+		go handleConnection(conn)
 	}
+}
+func handleConnection(connection net.Conn) {
+
+	defer connection.Close()
+	buffer := make([]byte, 1024)
+	connection.Read(buffer)
+	request := string(buffer)
+	firstLine := request[:strings.Index(request, "\n")]
+	path := firstLine[strings.Index(firstLine, "/") : strings.LastIndex(firstLine, "HTTP")-1]
+	fmt.Println("Path: ", path)
+	if path == "/" {
+		response := "HTTP/1.1 200 OK\r\n\r\n"
+		_, err := connection.Write([]byte(response))
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+			fmt.Println("Failed to response", err.Error())
+		}
+		connection.Close()
+	} else if strings.HasPrefix(path, "/echo") {
+		echoParam := path[6:]
+		body := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + fmt.Sprint(len(echoParam)) + "\r\n\r\n" + echoParam
+		_, err := connection.Write([]byte(body))
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+			fmt.Println("Failed to response", err.Error())
+		}
+		connection.Close()
+	} else if strings.HasPrefix(path, "/user-agent") {
+		requestLines := strings.Split(request, "\n")
+		userAgent := ""
+		for _, line := range requestLines {
+			if strings.HasPrefix(line, "User-Agent") {
+				userAgent = line[strings.Index(line, ":")+2 : len(line)-1]
+				break
+			}
+		}
+		body := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + fmt.Sprint(len(userAgent)) + "\r\n\r\n" + userAgent
+		_, err := connection.Write([]byte(body))
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+			fmt.Println("Failed to response", err.Error())
+		}
+		connection.Close()
+	} else {
+		response := "HTTP/1.1 404 Not Found\r\n\r\n"
+		_, err := connection.Write([]byte(response))
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+			fmt.Println("Failed to response", err.Error())
+		}
+		connection.Close()
+	}
+}
+
